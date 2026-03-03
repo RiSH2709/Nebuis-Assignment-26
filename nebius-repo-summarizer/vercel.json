@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "backend/main.py"
+    }
+  ],
+  "env": {
+    "LLM_PROVIDER": "@llm_provider",
+    "NEBIUS_API_KEY": "@nebius_api_key",
+    "GITHUB_TOKEN": "@github_token"
+  }
+}
