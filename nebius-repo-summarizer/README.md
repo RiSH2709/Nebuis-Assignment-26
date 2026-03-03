@@ -4,16 +4,22 @@ A Python API that analyzes GitHub repositories and generates human-readable summ
 
 ## Features
 
-- 🔍 Analyzes any public GitHub repository
-- 🤖 Uses Nebius AI (Llama-3.1-8B-Instruct) for intelligent summarization
-- 📊 Extracts technologies, project structure, and key insights
-- 🎨 Beautiful web UI for easy interaction
-- 📡 RESTful API with interactive Swagger documentation
-- ⚡ Smart file filtering and context management
+- **Repository Analysis**: Automatically analyze any public GitHub repository
+- **Multiple LLM Providers**: Support for Nebius AI, OpenAI, and Anthropic
+- **Smart File Selection**: Intelligently selects the most important repository files (README, configuration, source code)
+- **Beautiful Web Interface**: Modern, responsive UI for easy interaction
+- **RESTful API**: Interactive Swagger documentation for API testing
+- **Context Management**: Intelligent file filtering and token budget management
+- **GitHub Token Support**: Add Personal Access Token for higher API rate limits (60 → 5,000 req/hr)
 
-## Setup
+## Prerequisites
 
-**Requirements:** Python 3.10+
+- Python 3.10 or higher
+- pip (comes with Python)
+
+## Local Development Setup
+
+### 1. Clone the Repository
 
 ```bash
 # 1. Clone the repo
@@ -121,7 +127,7 @@ nebius-repo-summarizer/
 ├── .env.example             # Template for environment variables
 ├── .gitignore               # Git exclusion rules
 ├── requirements.txt         # Python dependencies
-├── Procfile                 # Deployment config (Heroku/Railway)
+├── Procfile                 # Deployment config (Heroku/Railway)(experimental)
 ├── render.yaml              # Render.com deployment config
 ├── vercel.json              # Vercel deployment config (experimental)
 └── README.md                # This file
@@ -207,63 +213,76 @@ GITHUB_TOKEN=ghp_...your_token...
 - LLM errors caught and returned as 500 with error message
 - Invalid JSON from LLM handled gracefully
 
-## Testing
-
-Start the server and test locally:
-
-```bash
-# Terminal 1: Start server
-python -m uvicorn backend.main:app --reload --port 8000
-
-# Terminal 2: Test with curl
-curl -X POST http://localhost:8000/summarize \
-  -H 'Content-Type: application/json' \
-  -d '{"github_url": "https://github.com/psf/requests"}'
-
-# Or open browser
-open http://localhost:8000/
-open http://localhost:8000/docs
-```
-
 ## Limitations & Future Improvements
 
-**Current Limitations:**
-- Only analyzes default branch (usually `main` or `master`)
-- 50 file limit to stay within context window
-- Public repositories only (unless GitHub token provided)
-- No caching (re-fetches files each request)
+### Current Limitations
+- Only analyzes the default branch (usually `main` or `master`)
+- Maximum 50 files processed to stay within context window
+- Public repositories only (private repos require GitHub token with appropriate permissions)
+- No caching mechanism (re-fetches files on each request)
+- Single repository analysis (no comparison features)
 
-**Potential Improvements:**
-- [ ] Add Redis caching for frequently analyzed repos
-- [ ] Support private repositories with OAuth
-- [ ] Allow branch selection
-- [ ] Generate visual architecture diagrams
-- [ ] Add repository comparison feature
-- [ ] Support for monorepos (analyze specific subdirectories)
-- [ ] Store analysis history in database
+### Planned Improvements
+- [ ] **Caching Layer**: Add Redis caching for frequently analyzed repositories
+- [ ] **Private Repository Support**: Implement OAuth for private repo access
+- [ ] **Branch Selection**: Allow users to specify which branch to analyze
+- [ ] **Visual Diagrams**: Generate architecture diagrams automatically
+- [ ] **Repository Comparison**: Compare multiple repositories side-by-side
+- [ ] **Monorepo Support**: Analyze specific subdirectories in large monorepos
+- [ ] **Analysis History**: Store previous analyses in a database
+- [ ] **Batch Processing**: Analyze multiple repositories concurrently
+- [ ] **Custom Prompts**: Allow users to customize the LLM analysis prompt
 
-## Security Notes
+## Security & Best Practices
 
-⚠️ **Never commit your `.env` file to GitHub!**
+⚠️ **Critical Security Notice**
 
-The `.gitignore` file is configured to exclude:
-- `.env` (your real API keys)
-- `__pycache__/` (Python bytecode)
-- Virtual environments (`venv/`, `.venv/`)
+**Never commit your `.env` file to version control!**
 
-Always use environment variables for sensitive data, never hardcode API keys.
+The `.gitignore` file is pre-configured to exclude:
+- `.env` - Your real API keys and sensitive information
+- `__pycache__/` - Python bytecode cache
+- `*.pyc` - Compiled Python files
+- `.venv/`, `venv/` - Virtual environments
+- `*.egg-info/` - Package metadata
+- `.pytest_cache/` - Test cache
+
+**Best Practices:**
+- ✅ Always use environment variables for sensitive data
+- ✅ Never hardcode API keys in source code
+- ✅ Use `.env.example` as a template (safe to commit)
+- ✅ Rotate API keys regularly
+- ✅ Use separate keys for development and production
+- ✅ Set appropriate GitHub token scopes (only `public_repo` if analyzing public repos)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT License - Feel free to use this project for learning or production.
+This project is licensed under the MIT License - feel free to use it for learning or production.
 
 ## Author
 
-Created as part of Nebius Assignment 26  
-GitHub: [@RiSH2709](https://github.com/RiSH2709)
+**Created as part of Nebius Assignment 26**
+
+- GitHub: [@RiSH2709](https://github.com/RiSH2709)
+- Repository: [Nebuis-Assignment-26](https://github.com/RiSH2709/Nebuis-Assignment-26)
 
 ## Acknowledgments
 
-- **Nebius AI Studio** for providing free LLM access
-- **FastAPI** for the excellent web framework
-- **GitHub** for the comprehensive REST API
+- **Nebius AI Studio** - For providing free access to state-of-the-art LLMs
+- **FastAPI** - For the excellent Python web framework
+- **GitHub** - For the comprehensive REST API
+- **Open Source Community** - For inspiration and best practices
+
+---
+
+**Need Help?** Open an issue on GitHub or check the [Swagger documentation](http://localhost:8000/docs) when running locally.

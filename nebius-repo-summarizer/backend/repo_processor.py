@@ -73,6 +73,17 @@ def select_files(all_files: list[dict]) -> list[str]:
     # Return top 50 file paths
     return [path for _, path in candidates[:50]]
 
+
+def build_directory_tree(all_files: list[dict], max_lines: int = 100) -> str:
+    """Create a simple text tree of the repository structure."""
+    paths = [f['path'] for f in all_files if not should_skip(f['path'])]
+    tree_lines = ['Repository structure:']
+    for path in sorted(paths)[:max_lines]:
+        parts = path.split('/')
+        indent = '  ' * (len(parts) - 1)
+        tree_lines.append(f'{indent}{parts[-1]}')
+    return '\n'.join(tree_lines)
+
 def build_context(file_contents: dict[str, str], max_chars: int = 80000) -> str:
     """
     Combine file contents into a single context string.
