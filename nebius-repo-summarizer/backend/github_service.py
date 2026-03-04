@@ -1,5 +1,6 @@
 # backend/github_service.py
 import httpx
+import asyncio
 from backend.config import GITHUB_TOKEN
 
 def parse_github_url(github_url: str) -> tuple[str, str]:
@@ -15,7 +16,7 @@ def get_headers() -> dict:
         headers['Authorization'] = f'token {GITHUB_TOKEN}'
     return headers
 
-async def fetch_repo_tree(owner: str, repo: str) -> list[dict]:
+async def fetch_repo_files(owner: str, repo: str) -> list[dict]:
     """Fetch the full file tree of a repository."""
     url = f'https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1'
     async with httpx.AsyncClient(timeout=30) as client:
@@ -44,3 +45,16 @@ async def fetch_file_content(owner: str, repo: str, path: str) -> str:
         return base64.b64decode(content).decode('utf-8', errors='replace')
     except Exception:
         return ''
+
+async def fetch_file_contents(owner: str, repo: str, selected_files: list) -> dict[str, str]:
+    """Fetch contents of multiple files concurrently."""
+    # Limit to top 20 files to avoid overwhelming the API
+    # Handle both list of strings and list of dicts
+    if selected_files and isinstance(selected_files[0], dict):
+        paths = [f['path'] for f in selected_files[:20]]
+    else:
+        paths = selected_files[:20]
+    
+    tasks = [fetch_file_content(owner, repo, path) for path in paths]
+    contents_list = await asyncio.gather(*tasks)
+    return dict(zip(paths, contents_list))

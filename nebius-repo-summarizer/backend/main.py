@@ -1,14 +1,11 @@
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from backend.github_service import parse_github_url, fetch_repo_tree, fetch_file_content
-from backend.repo_processor import select_files, build_context, build_directory_tree
-from backend.llm_service import summarize_repo
-import asyncio
-import os
 import logging
 from datetime import datetime
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from backend.github_service import fetch_repo_files, fetch_file_contents, parse_github_url
+from backend.repo_processor import select_files, build_context, build_directory_tree
+from backend.llm_service import call_llm
 
 # Configure logging
 logging.basicConfig(
@@ -22,82 +19,125 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title='GitHub Repo Summarizer')
+app = FastAPI(title="GitHub Repo Summarizer")
 
-# Log application startup
-logger.info("GitHub Repo Summarizer API started")
+# Custom exception handler for consistent error format
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "message": exc.detail
+        }
+    )
 
-# Mount static files
-static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static')
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+# Serve the web UI
+@app.get('/', response_class=HTMLResponse)
+async def read_root():
+    """Serve the web UI or return status"""
+    try:
+        with open('static/index.html', 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        return {"message": "GitHub Repo Summarizer API is running"}
 
+# Health check endpoint
+@app.get('/health')
+async def health():
+    """Health check endpoint for monitoring"""
+    logger.info("Health check requested")
+    return {'status': 'ok'}
+
+# Request model
 class SummarizeRequest(BaseModel):
     github_url: str
 
+# Main summarize endpoint
 @app.post('/summarize')
 async def summarize(request: SummarizeRequest):
+    """Analyze a GitHub repository and return summary"""
     start_time = datetime.now()
     logger.info(f"New summarize request for: {request.github_url}")
     
     try:
-        # Step 1: Parse the URL
+        # Parse and validate GitHub URL
         owner, repo = parse_github_url(request.github_url)
-        logger.debug(f"Parsed repo: {owner}/{repo}")
-
-        # Step 2: Get all files in the repo
-        all_files = await fetch_repo_tree(owner, repo)
+        logger.debug(f"Parsed URL: owner={owner}, repo={repo}")
+        
+        # Fetch repository file tree
+        all_files = await fetch_repo_files(owner, repo)
+        logger.info(f"Fetched {len(all_files)} files from {owner}/{repo}")
+        
         if not all_files:
             logger.warning(f"Repository {owner}/{repo} is empty")
-            return JSONResponse(status_code=400,
-                content={'status': 'error', 'message': 'Repository is empty'})
+            raise HTTPException(
+                status_code=400,
+                detail=f"Repository {owner}/{repo} appears to be empty or has no accessible files"
+            )
         
-        logger.info(f"Fetched {len(all_files)} files from {owner}/{repo}")
-
-        # Step 3: Select important files
-        selected_paths = select_files(all_files)
-        logger.debug(f"Selected {len(selected_paths)} important files")
-
-        # Step 4: Fetch file contents concurrently
-        tasks = [fetch_file_content(owner, repo, path) for path in selected_paths[:20]]
-        contents_list = await asyncio.gather(*tasks)
-        file_contents = dict(zip(selected_paths[:20], contents_list))
-
-        # Step 5: Build context string with directory structure and file content
-        directory_tree = build_directory_tree(all_files)
-        file_context = build_context(file_contents)
-        context = f'{directory_tree}\n\n{file_context}'
-        logger.debug(f"Built context: {len(context)} characters")
-
-        # Step 6: Call LLM
+        # Build directory tree context
+        tree_context = build_directory_tree(all_files)
+        logger.debug(f"Built directory tree with {len(tree_context.splitlines())} lines")
+        
+        # Select important files
+        selected_files = select_files(all_files)
+        logger.info(f"Selected {len(selected_files)} important files for analysis")
+        
+        # Fetch file contents
+        file_contents = await fetch_file_contents(owner, repo, selected_files)
+        logger.info(f"Fetched contents of {len(file_contents)} files")
+        
+        # Build context with directory tree
+        context = f"{tree_context}\n\n{build_context(file_contents)}"
+        logger.debug(f"Built context of {len(context)} characters")
+        
+        # Send to LLM for analysis
         logger.info(f"Sending context to LLM for {owner}/{repo}")
-        result = await summarize_repo(context)
-
-        # Log success with timing
+        summary_data = await call_llm(context)
+        
         elapsed = (datetime.now() - start_time).total_seconds()
         logger.info(f"Successfully analyzed {owner}/{repo} in {elapsed:.2f}s")
-
-        return result
-
+        
+        return summary_data
+    
     except ValueError as e:
-        logger.error(f"Invalid URL or repo not found: {request.github_url} - {str(e)}")
-        return JSONResponse(status_code=400,
-            content={'status': 'error', 'message': str(e)})
+        # Invalid URL or parsing errors
+        logger.error(f"Invalid URL: {request.github_url} - {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions (already formatted correctly)
+        raise
+    
     except Exception as e:
-        elapsed = (datetime.now() - start_time).total_seconds()
-        logger.error(f"Error analyzing {request.github_url} after {elapsed:.2f}s: {str(e)}", exc_info=True)
-        return JSONResponse(status_code=500,
-            content={'status': 'error', 'message': f'Internal error: {str(e)}'})
+        # Unexpected errors
+        error_msg = str(e)
+        logger.error(f"Error analyzing {request.github_url}: {error_msg}", exc_info=True)
+        
+        # Provide user-friendly error messages
+        if "rate limit" in error_msg.lower():
+            raise HTTPException(
+                status_code=403,
+                detail="GitHub API rate limit exceeded. Please add a GITHUB_TOKEN to your .env file for higher limits."
+            )
+        elif "not found" in error_msg.lower() or "404" in error_msg:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Repository not found or is private. Please check the URL: {request.github_url}"
+            )
+        elif "timeout" in error_msg.lower():
+            raise HTTPException(
+                status_code=500,
+                detail="Request timeout. The repository may be too large or the service is slow. Please try again."
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"An error occurred while analyzing the repository: {error_msg}"
+            )
 
-@app.get('/')
-async def root():
-    index_path = os.path.join(static_dir, 'index.html')
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {'message': 'GitHub Repo Summarizer API is running'}
-
-
-@app.get('/health')
-async def health():
-    logger.debug("Health check requested")
-    return {'status': 'ok'}
+logger.info("GitHub Repo Summarizer API started")

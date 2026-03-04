@@ -80,8 +80,13 @@ async def _summarize_with_anthropic(context: str) -> dict:
     raw = ''.join(text_parts).strip().replace('```json', '').replace('```', '').strip()
     return json.loads(raw)
 
-async def summarize_repo(context: str) -> dict:
+async def call_llm(context: str) -> dict:
     """Send repo context to LLM and return structured summary."""
     if LLM_PROVIDER == 'anthropic':
         return await _summarize_with_anthropic(context)
     return await _summarize_with_openai_compatible(context)
+
+# Keep old name for backwards compatibility
+async def summarize_repo(context: str) -> dict:
+    """Deprecated: Use call_llm instead."""
+    return await call_llm(context)
