@@ -11,7 +11,7 @@ A FastAPI application that analyzes GitHub repositories and generates human-read
 - **Python 3.10+** (Check with: `python --version`)
 - **pip** (Included with Python)
 - **API Key** for one of the following LLM providers:
-  - Nebius AI Studio (recommended, free tier available)
+  - Nebius AI Studio (recommended)
   - OpenAI
   - Anthropic
 
