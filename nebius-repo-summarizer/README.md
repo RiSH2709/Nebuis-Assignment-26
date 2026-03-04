@@ -122,6 +122,31 @@ curl -X POST http://localhost:8000/summarize \
 
 ---
 
+## 🤖 Model Choice
+
+I chose **meta-llama/Llama-3.3-70B-Instruct** via **Nebius AI Studio** (`LLM_PROVIDER=nebius`) as the default model. It provides strong code understanding, reliable structured JSON output, and good response quality for repository summarization. It also offers a practical free-tier path for evaluation and quick local testing.
+
+## 📦 Repository Content Handling Approach
+
+To stay within context limits and improve summary quality, the API sends only high-signal repository files to the LLM.
+
+### What is included
+- README files (project purpose and usage)
+- Dependency and build files (`requirements.txt`, `pyproject.toml`, `package.json`, etc.)
+- Entry-point files (`main.py`, `app.py`, `index.js`, etc.)
+- Important configuration files (`.yml`, `.yaml`, `.toml`, `.cfg`, `.ini`, Docker files)
+- Additional source files ranked by importance score
+
+### What is skipped
+- Heavy/generated/vendor folders (`node_modules`, `.git`, `dist`, `build`, `__pycache__`, etc.)
+- Binary and media assets (`.png`, `.jpg`, `.zip`, `.exe`, etc.)
+- Lock/cache/log artifacts (`package-lock.json`, `yarn.lock`, `*.lock`, `*.log`, etc.)
+
+### Why this approach
+This filtering keeps context focused on architecture and behavior instead of noise, reduces token usage and latency, and avoids exceeding model context windows on large repositories.
+
+---
+
 ## 📖 Detailed Documentation
 
 ### Features
