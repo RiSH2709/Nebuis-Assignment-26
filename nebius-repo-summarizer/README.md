@@ -157,7 +157,7 @@ This filtering keeps context focused on architecture and behavior instead of noi
 - ✅ **Directory Tree Analysis**: Provides repository structure context to the LLM
 - ✅ **Concurrent Processing**: Fetches multiple files in parallel for speed
 - ✅ **Error Handling**: Clear error messages for rate limits, 404s, and timeouts
-- ✅ **Comprehensive Logging**: Tracks all requests, timing, and errors
+- ✅ **Comprehensive Logging**: Automatic logging with error categorization, runtime metrics, and performance tracking (see [LOGGING.md](LOGGING.md))
 - ✅ **Health Check Endpoint**: Monitor service status with `GET /health`
 - ✅ **Beautiful Web UI**: User-friendly interface with purple gradient design
 - ✅ **Interactive API Docs**: Auto-generated Swagger UI at `/docs`

@@ -6,17 +6,10 @@ from pydantic import BaseModel
 from backend.github_service import fetch_repo_files, fetch_file_contents, parse_github_url
 from backend.repo_processor import select_files, build_context, build_directory_tree
 from backend.llm_service import call_llm
+from backend.logger_config import setup_logging, performance_logger, error_tracker
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
-)
-
+# Configure enhanced logging system
+setup_logging(log_level="INFO")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="GitHub Repo Summarizer")
@@ -99,11 +92,26 @@ async def summarize(request: SummarizeRequest):
         elapsed = (datetime.now() - start_time).total_seconds()
         logger.info(f"Successfully analyzed {owner}/{repo} in {elapsed:.2f}s")
         
+        # Log performance metrics
+        performance_logger.log_request(
+            repo_url=request.github_url,
+            duration=elapsed,
+            status="SUCCESS",
+            files_processed=len(file_contents),
+            context_size=len(context)
+        )
+        
         return summary_data
     
     except ValueError as e:
         # Invalid URL or parsing errors
         logger.error(f"Invalid URL: {request.github_url} - {str(e)}")
+        error_tracker.log_error(
+            error_type="VALIDATION",
+            repo_url=request.github_url,
+            error_msg=str(e),
+            exception=e
+        )
         raise HTTPException(
             status_code=400,
             detail=str(e)
@@ -118,26 +126,54 @@ async def summarize(request: SummarizeRequest):
         error_msg = str(e)
         logger.error(f"Error analyzing {request.github_url}: {error_msg}", exc_info=True)
         
-        # Provide user-friendly error messages
+        # Categorize and log the error
+        error_type = "SYSTEM"  # default
+        status_code = 500
+        user_message = f"An error occurred while analyzing the repository: {error_msg}"
+        
+        # Provide user-friendly error messages and categorization
         if "rate limit" in error_msg.lower():
-            raise HTTPException(
-                status_code=403,
-                detail="GitHub API rate limit exceeded. Please add a GITHUB_TOKEN to your .env file for higher limits."
-            )
+            error_type = "GITHUB_API"
+            status_code = 403
+            user_message = "GitHub API rate limit exceeded. Please add a GITHUB_TOKEN to your .env file for higher limits."
         elif "not found" in error_msg.lower() or "404" in error_msg:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Repository not found or is private. Please check the URL: {request.github_url}"
-            )
+            error_type = "GITHUB_API"
+            status_code = 400
+            user_message = f"Repository not found or is private. Please check the URL: {request.github_url}"
         elif "timeout" in error_msg.lower():
-            raise HTTPException(
-                status_code=500,
-                detail="Request timeout. The repository may be too large or the service is slow. Please try again."
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"An error occurred while analyzing the repository: {error_msg}"
-            )
+            error_type = "TIMEOUT"
+            status_code = 500
+            user_message = "Request timeout. The repository may be too large or the service is slow. Please try again."
+        elif "api" in error_msg.lower() and ("openai" in error_msg.lower() or "anthropic" in error_msg.lower() or "nebius" in error_msg.lower()):
+            error_type = "LLM_API"
+            status_code = 500
+            user_message = f"LLM provider error: {error_msg}"
+        elif "connection" in error_msg.lower() or "network" in error_msg.lower():
+            error_type = "NETWORK"
+            status_code = 500
+            user_message = "Network error. Please check your internet connection and try again."
+        
+        # Log to error tracker
+        error_tracker.log_error(
+            error_type=error_type,
+            repo_url=request.github_url,
+            error_msg=error_msg,
+            exception=e
+        )
+        
+        # Log failed performance metric
+        elapsed = (datetime.now() - start_time).total_seconds()
+        performance_logger.log_request(
+            repo_url=request.github_url,
+            duration=elapsed,
+            status=f"FAILED_{error_type}",
+            files_processed=0,
+            context_size=0
+        )
+        
+        raise HTTPException(
+            status_code=status_code,
+            detail=user_message
+        )
 
 logger.info("GitHub Repo Summarizer API started")
